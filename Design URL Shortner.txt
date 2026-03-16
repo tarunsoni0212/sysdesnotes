@@ -1,0 +1,103 @@
+Lets Start to Defining the Core Entities:
+
+	At this stage lets see the broader picture.
+	Right now we have:
+		Original URL
+		Shorten URL
+		User
+	
+The APIs:
+	We are using REST APIs here:
+		POST: Create a new Resource
+		GET: Read the existing resource
+		
+High Level Design:
+	
+	-> User should be able to give a long URL and receive short URL.
+	Client -> Server(Generate the Short URL & Save to DB) -> Database (Short URL code, Original URL, Expiration Date, Creation Date)
+	
+	-> User able to get/redirect to the original URL by short URL.
+	
+	Updated:
+		Client -> Server(Write: Generate the Short URL & Save to DB, Read: Lookup the original URL and redirect to it) -> Database (Short URL code, Original URL, Expiration Date, Creation Date)
+		
+			-> If the short code is found and hasn't expired (by comparing the current date to the expiration date in the database), the server retrieves the corresponding long URL. For expired URLs, return a 410 Gone status.
+			-> The server then sends an HTTP redirect response to the user's browser, instructing it to navigate to the original long URL.
+
+	-> For cleanup, we can run a background job periodically to delete expired rows from the database (or just keep them with their expiration date). More importantly, we should set the cache TTL to match or be shorter than URL expiration times so stale entries are automatically evicted.
+	
+	
+	Deep Dive:
+		
+		-> How can we we ensure that Short URLs are unique:
+			
+			-> Methods to Short the URLs:
+				
+				-> Long URL prefix(Bad Solution):
+					If we take first N character of the long url then it would be a very bad solution cause first N could be the same.
+					
+				-> Hash Function:
+					We can use Base62
+					
+					so if we are using with 8 characters then total combinations we can have is 62^8 = 218 Trillion Combination.
+					But again in this we can have the collisions. So another method.
+					
+				-> Hash Function with Code Generation by Redis:
+					As redis is single threaded and too much faster then we can use id generation from this and the Hash of it so no collisions are there.
+					
+					
+	GET Improvement:
+		
+		For the faster response we can use Cache technique, If shorten data is not available in cache then we will check with DB else we'll redirect from the cache itself.
+		
+		
+		 	
+		 	
+		 	=> Final Design:
+		 		
+		 		Write Flow: 
+Client
+   ↕
+API Gateway
+(route request to correct microservice)
+   ↓
+Write Service
+(generate short URL
+ + save to DB)
+   ↓
+Global Counter
+(get latest unique ID)
+   ↓
+Encode ID → Base62 → short_code
+   ↓
+Database
+(store mapping)
+
+
+			Read Flow:
+Client
+   ↓
+API Gateway
+   ↓
+Read Service
+   ↓
+Cache (Redis)
+   │
+   ├─ Cache Hit
+   │      ↓
+   │  return original_url
+   │      ↓
+   │  HTTP 302 Redirect
+   │
+   └─ Cache Miss
+          ↓
+       Database lookup
+          ↓
+       store in Redis cache
+          ↓
+       return original_url
+          ↓
+       HTTP 302 Redirect
+       
+       
+	
