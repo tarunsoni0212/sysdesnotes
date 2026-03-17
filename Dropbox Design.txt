@@ -1,0 +1,103 @@
+Designing Dropbox:
+	
+	
+Functional Requirements:
+	-> Users should be able to upload a file from any device
+	-> Users should be able to download a file from any device
+	-> Users should be able to share a file with other users and view the files shared with them
+	-> Users can automatically sync files across devices
+	
+	
+	
+	Functional
+		- upload a file
+		- download a file 
+		- share files
+		
+		
+	Core Entities:
+		-> File
+		-> File Metadata (Store info like: Name, SIze, The user who uploaded it)
+		-> User
+		
+		
+	API/System Interface:
+		
+		POST: /files
+		{
+			File,
+			MetaData,
+		}
+		
+		To Download:
+		
+		/files/{fileID} : get File & File Meta Data
+		
+		
+		To Share the file we can use:
+			
+		/files/{fileID}/share
+		
+		Request:
+			{
+				User[];
+			}
+			
+		
+		Lastly, we need a way for clients to query for changes to files on the remote server. This way we know which files need to be synced to the local device.
+		
+		GET /files/changes?since={timestamp} -> ChangeEvent[]
+		
+		Each ChangeEvent includes the fileId, the type of change (created, updated, deleted), and the updated metadata. By passing a since timestamp, the client can efficiently fetch only the changes that have occurred since its last sync.
+		
+		
+		HLD:
+			
+			1) Users should be able to upload a file from any device
+			
+			-> We are using DynamoDB here, but SQL would work fine too.
+			
+			Schema:
+				
+				  {
+    					"id": "123",
+    					"name": "file.txt",
+    					"size": 1000,
+    					"mimeType": "text/plain",
+    					"uploadedBy": "user1"
+  					}
+  					
+  			Now how to store the file:
+  				
+  				1) Store all the data to our local DB.
+  				(Not recommended, when it comes to scaling we have to do horizontal scaling, A lot of memory is required)
+  				
+  				2) Use external DB service like s3.
+  				
+  				Better solution.
+  				
+  				DIagram will be;
+  				
+  				uploader->gateway/LB->Application(file service) -> upload s3 service
+  																							  -> Save metaData to local DB.
+  																							  
+  				(In thi functionality all okay but the issue is what happen if s3 file is uploaded and metadata is not saved due to some issue, and vice versa)
+  																							  
+  																							  
+  				3) Use external s3 but directly upload to s3 
+  				
+  				uploader -> directly upload to s3 service
+  				
+  								->gateway/LB -> fileService/Application(Get the notification from s3 that file is saved) -> DB(After the confirmation from s3, metadata is stored)
+  								
+  								
+  				
+  				2) Users should be able to download a file from any device
+  				
+  				-> Download through file server:
+  					Approach:
+					The most common solution candidates come up with is to download the file once from Blob Storage to our backend server and then once more from our backend to the client.
+					(Issue: Slow beacause file is download 2 times, not recommended )
+					
+				->
+			
